@@ -110,6 +110,12 @@ User pulls only the necessary code into a separate function in prediction.py whi
    1. Click upload icon
    1. Enter username and password/token
 
+Please install Pillow:
+Here, let’s install Pillow 9.5.0 using the following command:
+
+
+pip install Pillow==9.5.0
+
 
 ## Using the Served Model 
 
