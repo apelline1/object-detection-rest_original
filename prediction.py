@@ -7,8 +7,23 @@ detector = saved_model.signatures['default']
 
 
 def predict(body):
+    if not body or 'image' not in body:
+        raise ValueError("Missing required field: 'image'")
+    
     base64img = body.get('image')
-    img_bytes = base64.decodebytes(base64img.encode())
+    if not base64img:
+        raise ValueError("Image field is empty")
+    
+    try:
+        # Handle base64 strings that may or may not have data URL prefix
+        if base64img.startswith('data:image'):
+            # Remove data URL prefix if present (e.g., "data:image/jpeg;base64,")
+            base64img = base64img.split(',', 1)[1]
+        
+        img_bytes = base64.decodebytes(base64img.encode())
+    except Exception as e:
+        raise ValueError(f"Failed to decode base64 image: {str(e)}")
+    
     detections = detect(img_bytes)
     cleaned = clean_detections(detections)
 
@@ -33,6 +48,13 @@ def clean_detections(detections):
     num_detections = min(detections['num_detections'], max_boxes)
 
     for i in range(0, num_detections):
+        # Handle both bytes and string types for detection_class_entities
+        class_entity = detections['detection_class_entities'][i]
+        if isinstance(class_entity, bytes):
+            class_str = class_entity.decode('utf-8')
+        else:
+            class_str = str(class_entity)
+        
         d = {
             'box': {
                 'yMin': detections['detection_boxes'][i][0],
@@ -40,9 +62,9 @@ def clean_detections(detections):
                 'yMax': detections['detection_boxes'][i][2],
                 'xMax': detections['detection_boxes'][i][3]
             },
-            'class': detections['detection_class_entities'][i].decode('utf-8'),
-            'label': detections['detection_class_entities'][i].decode('utf-8'),
-            'score': detections['detection_scores'][i],
+            'class': class_str,
+            'label': class_str,
+            'score': float(detections['detection_scores'][i]),
         }
         cleaned.append(d)
 
