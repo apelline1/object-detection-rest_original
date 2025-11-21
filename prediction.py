@@ -1,9 +1,18 @@
 import tensorflow as tf
 import base64
+import os
 
 model_dir = 'models/openimages_v4_ssd_mobilenet_v2_1'
-saved_model = tf.saved_model.load(model_dir)
-detector = saved_model.signatures['default']
+
+# Load model with error handling
+try:
+    if not os.path.exists(model_dir):
+        raise FileNotFoundError(f"Model directory not found: {model_dir}")
+    saved_model = tf.saved_model.load(model_dir)
+    detector = saved_model.signatures['default']
+except Exception as e:
+    print(f"ERROR: Failed to load model from {model_dir}: {str(e)}")
+    raise
 
 
 def predict(body):
@@ -16,30 +25,50 @@ def predict(body):
     
     try:
         # Handle base64 strings that may or may not have data URL prefix
-        if base64img.startswith('data:image'):
+        if isinstance(base64img, str) and base64img.startswith('data:image'):
             # Remove data URL prefix if present (e.g., "data:image/jpeg;base64,")
             base64img = base64img.split(',', 1)[1]
         
-        img_bytes = base64.decodebytes(base64img.encode())
+        # Ensure base64 string is properly formatted (add padding if needed)
+        base64img = base64img.strip()
+        # Add padding if necessary
+        missing_padding = len(base64img) % 4
+        if missing_padding:
+            base64img += '=' * (4 - missing_padding)
+        
+        img_bytes = base64.b64decode(base64img)
     except Exception as e:
         raise ValueError(f"Failed to decode base64 image: {str(e)}")
     
-    detections = detect(img_bytes)
-    cleaned = clean_detections(detections)
+    if not img_bytes:
+        raise ValueError("Decoded image is empty")
+    
+    try:
+        detections = detect(img_bytes)
+        cleaned = clean_detections(detections)
+    except Exception as e:
+        raise ValueError(f"Failed to process image: {str(e)}")
 
     return { 'detections': cleaned }
 
 
 def detect(img):
-    image = tf.image.decode_jpeg(img, channels=3)
-    converted_img  = tf.image.convert_image_dtype(image, tf.float32)[tf.newaxis, ...]
-    result = detector(converted_img)
-    num_detections = len(result["detection_scores"])
+    try:
+        image = tf.image.decode_jpeg(img, channels=3)
+    except Exception as e:
+        raise ValueError(f"Failed to decode JPEG image: {str(e)}")
+    
+    try:
+        converted_img = tf.image.convert_image_dtype(image, tf.float32)[tf.newaxis, ...]
+        result = detector(converted_img)
+        num_detections = len(result["detection_scores"])
 
-    output_dict = {key:value.numpy().tolist() for key, value in result.items()}
-    output_dict['num_detections'] = num_detections
+        output_dict = {key:value.numpy().tolist() for key, value in result.items()}
+        output_dict['num_detections'] = num_detections
 
-    return output_dict
+        return output_dict
+    except Exception as e:
+        raise ValueError(f"Failed to run detection: {str(e)}")
 
 
 def clean_detections(detections):
@@ -72,9 +101,17 @@ def clean_detections(detections):
 
 
 def preload_model():
-    blank_jpg = tf.io.read_file('blank.jpeg')
-    blank_img = tf.image.decode_jpeg(blank_jpg, channels=3)
-    detector(tf.image.convert_image_dtype(blank_img, tf.float32)[tf.newaxis, ...])
+    try:
+        if os.path.exists('blank.jpeg'):
+            blank_jpg = tf.io.read_file('blank.jpeg')
+            blank_img = tf.image.decode_jpeg(blank_jpg, channels=3)
+            detector(tf.image.convert_image_dtype(blank_img, tf.float32)[tf.newaxis, ...])
+    except Exception as e:
+        print(f"WARNING: Failed to preload model with blank image: {str(e)}")
+        # Continue anyway - model is still loaded
 
 
-preload_model()
+try:
+    preload_model()
+except Exception as e:
+    print(f"WARNING: Model preload failed: {str(e)}")
