@@ -1,0 +1,65 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: object-detection-rest
+  labels:
+    app: object-detection-rest
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: object-detection-rest
+  template:
+    metadata:
+      labels:
+        app: object-detection-rest
+    spec:
+      # Add imagePullSecrets if your internal Quay registry requires authentication
+      imagePullSecrets:
+        - name: quay-registry-secret  # Update this to match your secret name
+      containers:
+      - name: object-detection-rest
+        # Update this to point to your internal Quay registry
+        # Format: <internal-quay-registry-url>/<namespace>/<image-name>:<tag>
+        # Example: quay-registry.example.com/your-namespace/object-detection-rest:latest
+        image: quay-aifactory.apps.s99ch01.aifactory.telenor.com/s99ct02_redhat-test-1-test-1/object-detection-rest:latest
+        ports:
+        - containerPort: 8080
+          protocol: TCP
+        env:
+        - name: APP_CONFIG
+          value: "gunicorn_config.py"
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: object-detection-rest
+  labels:
+    app: object-detection-rest
+spec:
+  ports:
+  - port: 8080
+    targetPort: 8080
+    protocol: TCP
+    name: http
+  selector:
+    app: object-detection-rest
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: object-detection-rest
+spec:
+  to:
+    kind: Service
+    name: object-detection-rest
+  port:
+    targetPort: http
+
