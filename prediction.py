@@ -5,13 +5,20 @@ import os
 model_dir = 'models/openimages_v4_ssd_mobilenet_v2_1'
 
 # Load model with error handling
+print("=" * 80, flush=True)
+print(f"INFO: Starting model load from {model_dir}", flush=True)
 try:
     if not os.path.exists(model_dir):
         raise FileNotFoundError(f"Model directory not found: {model_dir}")
+    print(f"INFO: Model directory found, loading TensorFlow model...", flush=True)
     saved_model = tf.saved_model.load(model_dir)
     detector = saved_model.signatures['default']
+    print(f"INFO: Model loaded successfully from {model_dir}", flush=True)
+    print("=" * 80, flush=True)
 except Exception as e:
-    print(f"ERROR: Failed to load model from {model_dir}: {str(e)}")
+    print(f"ERROR: Failed to load model from {model_dir}: {str(e)}", flush=True)
+    import traceback
+    print(traceback.format_exc(), flush=True)
     raise
 
 
