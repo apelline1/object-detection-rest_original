@@ -23,6 +23,21 @@ logging.basicConfig(
 def status():
     return jsonify({'status': 'ok'})
 
+@application.route('/test', methods=['POST'])
+def test():
+    """Test endpoint to verify backend is working"""
+    try:
+        print("TEST endpoint called", flush=True)
+        data = request.get_json() if request.is_json else {}
+        return jsonify({
+            'status': 'ok',
+            'message': 'Backend is working',
+            'received_data': str(data)[:100] if data else 'no data'
+        })
+    except Exception as e:
+        print(f"TEST endpoint error: {str(e)}", flush=True)
+        return jsonify({'error': str(e)}), 500
+
 
 @application.route('/predictions', methods=['POST'])
 def create_prediction():
@@ -101,10 +116,24 @@ def api_images():
         print(f"Image field present, type: {type(image_data)}, length: {len(str(image_data))}", flush=True)
         application.logger.info(f'Image field present, length: {len(str(image_data))}')
         
+        # Check image size (rough estimate - base64 is ~33% larger than binary)
+        image_str = str(image_data)
+        estimated_size = len(image_str) * 3 // 4
+        if estimated_size > 10 * 1024 * 1024:  # 10MB
+            print(f"Image too large: estimated {estimated_size} bytes", flush=True)
+            return jsonify({'error': 'Image too large', 'message': f'Image exceeds 10MB limit (estimated {estimated_size} bytes)'}), 400
+        
         # Call prediction function
         print("Calling predict function...", flush=True)
         application.logger.info('Calling predict function...')
-        result = predict(body)
+        try:
+            result = predict(body)
+        except MemoryError as e:
+            print(f"Memory error: {str(e)}", flush=True)
+            return jsonify({'error': 'Out of memory', 'message': 'Image is too large to process'}), 500
+        except RuntimeError as e:
+            print(f"Runtime error: {str(e)}", flush=True)
+            return jsonify({'error': 'Runtime error', 'message': str(e)}), 500
         print(f"Prediction successful, returning {len(result.get('detections', []))} detections", flush=True)
         application.logger.info(f'Prediction successful, returning {len(result.get("detections", []))} detections')
         print("=" * 80, flush=True)
