@@ -16,6 +16,8 @@ except Exception as e:
 
 
 def predict(body):
+    print("predict() called", flush=True)
+    
     if not body or 'image' not in body:
         raise ValueError("Missing required field: 'image'")
     
@@ -23,11 +25,14 @@ def predict(body):
     if not base64img:
         raise ValueError("Image field is empty")
     
+    print(f"Image data length: {len(base64img)}", flush=True)
+    
     try:
         # Handle base64 strings that may or may not have data URL prefix
         if isinstance(base64img, str) and base64img.startswith('data:image'):
             # Remove data URL prefix if present (e.g., "data:image/jpeg;base64,")
             base64img = base64img.split(',', 1)[1]
+            print("Removed data URL prefix", flush=True)
         
         # Ensure base64 string is properly formatted (add padding if needed)
         base64img = base64img.strip()
@@ -35,39 +40,62 @@ def predict(body):
         missing_padding = len(base64img) % 4
         if missing_padding:
             base64img += '=' * (4 - missing_padding)
+            print(f"Added {4 - missing_padding} padding characters", flush=True)
         
+        print("Decoding base64...", flush=True)
         img_bytes = base64.b64decode(base64img)
+        print(f"Decoded image size: {len(img_bytes)} bytes", flush=True)
     except Exception as e:
+        print(f"Base64 decode error: {str(e)}", flush=True)
         raise ValueError(f"Failed to decode base64 image: {str(e)}")
     
     if not img_bytes:
         raise ValueError("Decoded image is empty")
     
     try:
+        print("Running detection...", flush=True)
         detections = detect(img_bytes)
+        print("Cleaning detections...", flush=True)
         cleaned = clean_detections(detections)
+        print(f"Returning {len(cleaned)} detections", flush=True)
     except Exception as e:
+        print(f"Detection/cleaning error: {str(e)}", flush=True)
+        import traceback
+        print(traceback.format_exc(), flush=True)
         raise ValueError(f"Failed to process image: {str(e)}")
 
     return { 'detections': cleaned }
 
 
 def detect(img):
+    print("detect() called", flush=True)
     try:
+        print("Decoding JPEG...", flush=True)
         image = tf.image.decode_jpeg(img, channels=3)
+        print("JPEG decoded successfully", flush=True)
     except Exception as e:
+        print(f"JPEG decode error: {str(e)}", flush=True)
         raise ValueError(f"Failed to decode JPEG image: {str(e)}")
     
     try:
+        print("Converting image dtype...", flush=True)
         converted_img = tf.image.convert_image_dtype(image, tf.float32)[tf.newaxis, ...]
+        print("Running detector...", flush=True)
         result = detector(converted_img)
+        print("Detection complete", flush=True)
         num_detections = len(result["detection_scores"])
+        print(f"Number of detections: {num_detections}", flush=True)
 
+        print("Converting to dict...", flush=True)
         output_dict = {key:value.numpy().tolist() for key, value in result.items()}
         output_dict['num_detections'] = num_detections
+        print("Detection dict created", flush=True)
 
         return output_dict
     except Exception as e:
+        print(f"Detection error: {str(e)}", flush=True)
+        import traceback
+        print(traceback.format_exc(), flush=True)
         raise ValueError(f"Failed to run detection: {str(e)}")
 
 
