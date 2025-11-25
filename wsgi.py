@@ -1,9 +1,21 @@
 import json
 import traceback
+import sys
 from flask import Flask, jsonify, request
 from prediction import predict
 
 application = Flask(__name__)
+
+# Configure logging to stdout/stderr for better visibility in containers
+import logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+        logging.StreamHandler(sys.stderr)
+    ]
+)
 
 
 @application.route('/')

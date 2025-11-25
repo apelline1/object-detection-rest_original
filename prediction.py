@@ -16,6 +16,7 @@ except Exception as e:
 
 
 def predict(body):
+    print("=" * 50, flush=True)
     print("predict() called", flush=True)
     
     if not body or 'image' not in body:
@@ -25,7 +26,11 @@ def predict(body):
     if not base64img:
         raise ValueError("Image field is empty")
     
+    if not isinstance(base64img, str):
+        raise ValueError(f"Image field must be a string, got {type(base64img)}")
+    
     print(f"Image data length: {len(base64img)}", flush=True)
+    print(f"First 50 chars: {base64img[:50]}", flush=True)
     
     try:
         # Handle base64 strings that may or may not have data URL prefix
@@ -36,6 +41,9 @@ def predict(body):
         
         # Ensure base64 string is properly formatted (add padding if needed)
         base64img = base64img.strip()
+        # Remove any whitespace or newlines
+        base64img = ''.join(base64img.split())
+        
         # Add padding if necessary
         missing_padding = len(base64img) % 4
         if missing_padding:
@@ -43,14 +51,30 @@ def predict(body):
             print(f"Added {4 - missing_padding} padding characters", flush=True)
         
         print("Decoding base64...", flush=True)
-        img_bytes = base64.b64decode(base64img)
+        try:
+            img_bytes = base64.b64decode(base64img, validate=True)
+        except Exception as decode_err:
+            print(f"Base64 decode failed: {str(decode_err)}", flush=True)
+            # Try without validation as fallback
+            img_bytes = base64.b64decode(base64img, validate=False)
+            print("Base64 decode succeeded without validation", flush=True)
+        
         print(f"Decoded image size: {len(img_bytes)} bytes", flush=True)
+        
+        if len(img_bytes) == 0:
+            raise ValueError("Decoded image is empty")
+        
+        if len(img_bytes) > 10 * 1024 * 1024:  # 10MB limit
+            raise ValueError(f"Image too large: {len(img_bytes)} bytes (max 10MB)")
+            
+    except ValueError as e:
+        # Re-raise ValueError as-is
+        raise
     except Exception as e:
         print(f"Base64 decode error: {str(e)}", flush=True)
+        import traceback
+        print(traceback.format_exc(), flush=True)
         raise ValueError(f"Failed to decode base64 image: {str(e)}")
-    
-    if not img_bytes:
-        raise ValueError("Decoded image is empty")
     
     try:
         print("Running detection...", flush=True)
@@ -58,6 +82,10 @@ def predict(body):
         print("Cleaning detections...", flush=True)
         cleaned = clean_detections(detections)
         print(f"Returning {len(cleaned)} detections", flush=True)
+        print("=" * 50, flush=True)
+    except ValueError as e:
+        # Re-raise ValueError as-is
+        raise
     except Exception as e:
         print(f"Detection/cleaning error: {str(e)}", flush=True)
         import traceback
@@ -71,15 +99,24 @@ def detect(img):
     print("detect() called", flush=True)
     try:
         print("Decoding JPEG...", flush=True)
+        # Ensure img is bytes
+        if isinstance(img, str):
+            img = img.encode('utf-8')
         image = tf.image.decode_jpeg(img, channels=3)
         print("JPEG decoded successfully", flush=True)
+    except tf.errors.InvalidArgumentError as e:
+        print(f"TensorFlow InvalidArgumentError (JPEG decode): {str(e)}", flush=True)
+        raise ValueError(f"Invalid image format - not a valid JPEG: {str(e)}")
     except Exception as e:
         print(f"JPEG decode error: {str(e)}", flush=True)
+        import traceback
+        print(traceback.format_exc(), flush=True)
         raise ValueError(f"Failed to decode JPEG image: {str(e)}")
     
     try:
         print("Converting image dtype...", flush=True)
         converted_img = tf.image.convert_image_dtype(image, tf.float32)[tf.newaxis, ...]
+        print(f"Image shape after conversion: {converted_img.shape}", flush=True)
         print("Running detector...", flush=True)
         result = detector(converted_img)
         print("Detection complete", flush=True)
@@ -87,11 +124,26 @@ def detect(img):
         print(f"Number of detections: {num_detections}", flush=True)
 
         print("Converting to dict...", flush=True)
-        output_dict = {key:value.numpy().tolist() for key, value in result.items()}
+        output_dict = {}
+        for key, value in result.items():
+            try:
+                if hasattr(value, 'numpy'):
+                    output_dict[key] = value.numpy().tolist()
+                else:
+                    output_dict[key] = value.tolist() if hasattr(value, 'tolist') else value
+            except Exception as e:
+                print(f"Error converting key {key}: {str(e)}", flush=True)
+                raise
         output_dict['num_detections'] = num_detections
         print("Detection dict created", flush=True)
 
         return output_dict
+    except tf.errors.ResourceExhaustedError as e:
+        print(f"TensorFlow ResourceExhaustedError: {str(e)}", flush=True)
+        raise ValueError(f"Image too large or out of memory: {str(e)}")
+    except tf.errors.InvalidArgumentError as e:
+        print(f"TensorFlow InvalidArgumentError: {str(e)}", flush=True)
+        raise ValueError(f"Invalid image data: {str(e)}")
     except Exception as e:
         print(f"Detection error: {str(e)}", flush=True)
         import traceback
