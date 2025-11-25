@@ -21,21 +21,31 @@ logging.basicConfig(
 @application.route('/')
 @application.route('/status')
 def status():
-    return jsonify({'status': 'ok'})
+    """Health check endpoint"""
+    try:
+        # Verify model is loaded by checking if prediction module can be imported
+        # If model loading failed, the import would have raised an exception
+        from prediction import detector
+        application.logger.info('Status check: OK - Model loaded')
+        return jsonify({'status': 'ok', 'message': 'Service is healthy'}), 200
+    except Exception as e:
+        application.logger.error(f'Status check failed: {str(e)}')
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
-@application.route('/test', methods=['POST'])
+@application.route('/test', methods=['GET', 'POST'])
 def test():
     """Test endpoint to verify backend is working"""
     try:
         print("TEST endpoint called", flush=True)
-        data = request.get_json() if request.is_json else {}
+        application.logger.info('Test endpoint called')
         return jsonify({
             'status': 'ok',
             'message': 'Backend is working',
-            'received_data': str(data)[:100] if data else 'no data'
-        })
+            'endpoint': '/test'
+        }), 200
     except Exception as e:
         print(f"TEST endpoint error: {str(e)}", flush=True)
+        application.logger.error(f'Test endpoint error: {str(e)}')
         return jsonify({'error': str(e)}), 500
 
 

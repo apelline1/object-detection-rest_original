@@ -98,23 +98,39 @@ def predict(body):
 def detect(img):
     print("detect() called", flush=True)
     try:
-        print("Decoding JPEG...", flush=True)
+        print("Decoding image...", flush=True)
         # Ensure img is bytes
         if isinstance(img, str):
             img = img.encode('utf-8')
-        image = tf.image.decode_jpeg(img, channels=3)
-        print("JPEG decoded successfully", flush=True)
+        
+        # Try decode_image first (handles JPEG, PNG, GIF, BMP)
+        # decode_image returns a 3D tensor (height, width, channels)
+        try:
+            image = tf.image.decode_image(img, channels=3)
+            print("Image decoded successfully using decode_image", flush=True)
+        except Exception as decode_image_err:
+            print(f"decode_image failed: {str(decode_image_err)}, trying decode_jpeg...", flush=True)
+            # Fallback to decode_jpeg for JPEG-specific handling
+            image = tf.image.decode_jpeg(img, channels=3)
+            print("JPEG decoded successfully", flush=True)
+        
+        # Verify image shape (should be 3D: height, width, channels)
+        if len(image.shape) != 3:
+            raise ValueError(f"Unexpected image shape after decode: {image.shape}, expected 3D tensor")
+        print(f"Image shape after decode: {image.shape}", flush=True)
+            
     except tf.errors.InvalidArgumentError as e:
-        print(f"TensorFlow InvalidArgumentError (JPEG decode): {str(e)}", flush=True)
-        raise ValueError(f"Invalid image format - not a valid JPEG: {str(e)}")
+        print(f"TensorFlow InvalidArgumentError (image decode): {str(e)}", flush=True)
+        raise ValueError(f"Invalid image format: {str(e)}")
     except Exception as e:
-        print(f"JPEG decode error: {str(e)}", flush=True)
+        print(f"Image decode error: {str(e)}", flush=True)
         import traceback
         print(traceback.format_exc(), flush=True)
-        raise ValueError(f"Failed to decode JPEG image: {str(e)}")
+        raise ValueError(f"Failed to decode image: {str(e)}")
     
     try:
-        print("Converting image dtype...", flush=True)
+        print("Converting image dtype and adding batch dimension...", flush=True)
+        # Convert to float32 and add batch dimension [batch, height, width, channels]
         converted_img = tf.image.convert_image_dtype(image, tf.float32)[tf.newaxis, ...]
         print(f"Image shape after conversion: {converted_img.shape}", flush=True)
         print("Running detector...", flush=True)
